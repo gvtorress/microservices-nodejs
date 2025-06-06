@@ -1,0 +1,1 @@
+ALTER TABLE "orders" RENAME COLUMN "td" TO "id";
