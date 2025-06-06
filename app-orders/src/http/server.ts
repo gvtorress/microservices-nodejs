@@ -1,16 +1,21 @@
+import '@opentelemetry/auto-instrumentations-node/register';
+
 import { randomUUID } from 'node:crypto';
+import { setTimeout } from 'node:timers/promises';
 import { fastify } from 'fastify';
-import { fastifyCors } from '@fastify/cors';
 import { z } from 'zod';
 import {
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
+import { fastifyCors } from '@fastify/cors';
+import { trace } from '@opentelemetry/api';
 
 import { schema } from '../db/schema/index.ts';
 import { db } from '../db/client.ts';
 import { dispatchOrderCreated } from '../broker/messages/order-created.ts';
+import { tracer } from '../tracer/tracer.ts';
 
 const app = fastify().withTypeProvider<ZodTypeProvider>();
 
@@ -35,18 +40,29 @@ app.post('/orders', {
   console.log('Creating order with amount ', amount);
 
   const orderId = randomUUID();
+
+  await db.insert(schema.orders).values({
+    id: orderId,
+    customerId: 'f3b7567c-8081-486e-b740-edbe375208f3',
+    amount,
+  });
+
+  // Criar um span envolta de uma área do código específica para poder analisar especificamente essa área
+  const span = tracer.startSpan('teste');
+  span.setAttribute('teste_tag', 'teste');
+
+  await setTimeout(2000);
+
+  span.end();
+
+  trace.getActiveSpan()?.setAttribute('order_id', orderId);
+
   dispatchOrderCreated({
     orderId,
     amount,
     customer: {
       id: 'f3b7567c-8081-486e-b740-edbe375208f3',
     },
-  })
-
-  await db.insert(schema.orders).values({
-    id: orderId,
-    customerId: 'f3b7567c-8081-486e-b740-edbe375208f3',
-    amount,
   });
   
   return reply.status(201).send();
